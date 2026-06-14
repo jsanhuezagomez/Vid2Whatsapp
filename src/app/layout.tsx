@@ -3,7 +3,7 @@ import "./styles.css";
 
 export const metadata: Metadata = {
   title: "Vid2WhatsApp",
-  description: "Turn a YouTube timestamp into a WhatsApp-ready WebP sticker."
+  description: "Convierte un momento de YouTube en un sticker listo para WhatsApp."
 };
 
 export default function RootLayout({

@@ -1,16 +1,18 @@
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { CommandError } from "./process";
 import { runCommand } from "./process";
 import { assertYouTubeUrl, downloadSection, getDirectVideoUrl, parseTimestamp } from "./youtube";
 
 export type StickerMode = "static" | "animated";
+export type StickerShape = "square" | "original";
 
 export type GenerateStickerInput = {
   url: string;
   timestamp?: string;
+  endTimestamp?: string;
   mode: StickerMode;
-  duration?: number;
+  shape?: StickerShape;
 };
 
 export type GenerateStickerResult = {
@@ -19,16 +21,39 @@ export type GenerateStickerResult = {
   absolutePath: string;
   sizeBytes: number;
   mode: StickerMode;
+  shape: StickerShape;
 };
 
 const TMP_DIR = path.join(process.cwd(), "tmp");
+const GENERATED_FILE_MAX_BYTES = 500 * 1024;
+const TMP_TTL_MS = Number(process.env.STICKER_TMP_TTL_MS ?? 60 * 60 * 1000);
 
-function safeDuration(value: number | undefined) {
-  if (!value || Number.isNaN(value)) {
-    return 3;
+export function resolveClipDuration(startSeconds: number, endSeconds: number) {
+  const duration = Math.round((endSeconds - startSeconds) * 1000) / 1000;
+
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error("End timestamp must be after the start timestamp.");
   }
 
-  return Math.min(6, Math.max(1, Math.round(value)));
+  if (duration > 5) {
+    throw new Error("Clip range cannot be longer than 5 seconds.");
+  }
+
+  return duration;
+}
+
+export function safeShape(value: StickerShape | undefined): StickerShape {
+  return value === "original" ? "original" : "square";
+}
+
+export function videoFilter(shape: StickerShape, fps?: number) {
+  const fpsFilter = fps ? `fps=${fps},` : "";
+
+  if (shape === "original") {
+    return `${fpsFilter}scale=512:512:force_original_aspect_ratio=decrease,format=${fps ? "yuv420p" : "rgba"}`;
+  }
+
+  return `${fpsFilter}scale=512:512:force_original_aspect_ratio=increase,crop=512:512,format=${fps ? "yuv420p" : "rgba"}`;
 }
 
 function seekTime(seconds: number) {
@@ -40,10 +65,41 @@ async function fileSize(filePath: string) {
   return stats.size;
 }
 
+async function assertGeneratedFileSize(filePath: string) {
+  const bytes = await fileSize(filePath);
+
+  if (bytes > GENERATED_FILE_MAX_BYTES) {
+    throw new Error("The generated sticker is too large. Try a shorter or simpler clip.");
+  }
+
+  return bytes;
+}
+
+async function cleanupOldJobs() {
+  await mkdir(TMP_DIR, { recursive: true });
+
+  const now = Date.now();
+  const entries = await readdir(TMP_DIR, { withFileTypes: true });
+
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && /^[a-f0-9-]{36}$/.test(entry.name))
+      .map(async (entry) => {
+        const dir = path.join(TMP_DIR, entry.name);
+        const stats = await stat(dir).catch(() => null);
+
+        if (stats && now - stats.mtimeMs > TMP_TTL_MS) {
+          await rm(dir, { force: true, recursive: true });
+        }
+      })
+  );
+}
+
 async function encodeStatic(
   inputUrl: string,
   startSeconds: number,
   outputPath: string,
+  shape: StickerShape,
   timeoutMs = 60_000,
   seekMode: "input" | "output" = "input"
 ) {
@@ -56,13 +112,15 @@ async function encodeStatic(
       "-hide_banner",
       "-nostdin",
       "-y",
+      "-threads",
+      "1",
       ...(seekMode === "input" ? seekArgs : []),
       ...inputArgs,
       ...(seekMode === "output" ? seekArgs : []),
       "-frames:v",
       "1",
       "-vf",
-      "scale=512:512:force_original_aspect_ratio=increase,crop=512:512,format=rgba",
+      videoFilter(shape),
       "-c:v",
       "libwebp",
       "-lossless",
@@ -82,6 +140,7 @@ async function encodeAnimated(
   startSeconds: number,
   duration: number,
   outputPath: string,
+  shape: StickerShape,
   timeoutMs = 80_000,
   seekMode: "input" | "output" = "input"
 ) {
@@ -102,6 +161,8 @@ async function encodeAnimated(
         "-hide_banner",
         "-nostdin",
         "-y",
+        "-threads",
+        "1",
         ...(seekMode === "input" ? seekArgs : []),
         ...(seekMode === "input" ? ["-t", String(duration)] : []),
         ...inputArgs,
@@ -109,7 +170,7 @@ async function encodeAnimated(
         ...(seekMode === "output" ? ["-t", String(duration)] : []),
         "-an",
         "-vf",
-        `fps=${attempt.fps},scale=512:512:force_original_aspect_ratio=increase,crop=512:512,format=yuv420p`,
+        videoFilter(shape, attempt.fps),
         "-c:v",
         "libx264",
         "-profile:v",
@@ -128,10 +189,12 @@ async function encodeAnimated(
     );
 
     const bytes = await fileSize(outputPath);
-    if (bytes <= 500 * 1024) {
+    if (bytes <= GENERATED_FILE_MAX_BYTES) {
       return;
     }
   }
+
+  throw new Error("The generated sticker is too large. Try a shorter or simpler clip.");
 }
 
 async function findDownloadedMedia(jobDir: string) {
@@ -161,15 +224,16 @@ async function encodeWithFallback(input: {
   startSeconds: number;
   duration: number;
   mode: StickerMode;
+  shape: StickerShape;
   outputPath: string;
 }) {
   try {
     if (input.mode === "static") {
-      await encodeStatic(input.streamUrl, input.startSeconds, input.outputPath, 15_000);
+      await encodeStatic(input.streamUrl, input.startSeconds, input.outputPath, input.shape, 15_000);
       return;
     }
 
-    await encodeAnimated(input.streamUrl, input.startSeconds, input.duration, input.outputPath, 20_000);
+    await encodeAnimated(input.streamUrl, input.startSeconds, input.duration, input.outputPath, input.shape, 20_000);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "unknown error";
     console.warn(`[fallback] Fast remote ffmpeg failed: ${reason}`);
@@ -177,12 +241,12 @@ async function encodeWithFallback(input: {
     try {
       if (input.mode === "static") {
         console.warn("[fallback] Trying remote decode before downloading a local section.");
-        await encodeStatic(input.streamUrl, input.startSeconds, input.outputPath, 30_000, "output");
+        await encodeStatic(input.streamUrl, input.startSeconds, input.outputPath, input.shape, 30_000, "output");
         return;
       }
 
       console.warn("[fallback] Trying remote decode before downloading a local section.");
-      await encodeAnimated(input.streamUrl, input.startSeconds, input.duration, input.outputPath, 35_000, "output");
+      await encodeAnimated(input.streamUrl, input.startSeconds, input.duration, input.outputPath, input.shape, 35_000, "output");
       return;
     } catch (remoteDecodeError) {
       const remoteDecodeReason = remoteDecodeError instanceof Error ? remoteDecodeError.message : "unknown error";
@@ -218,11 +282,11 @@ async function encodeWithFallback(input: {
     const mediaPath = await findDownloadedMedia(input.jobDir);
 
     if (input.mode === "static") {
-      await encodeStatic(mediaPath, 0, input.outputPath);
+      await encodeStatic(mediaPath, 0, input.outputPath, input.shape);
       return;
     }
 
-    await encodeAnimated(mediaPath, 0, input.duration, input.outputPath);
+    await encodeAnimated(mediaPath, 0, input.duration, input.outputPath, input.shape);
 
     if (error instanceof CommandError) {
       console.warn(`[fallback] Original stderr tail: ${error.stderr.split(/\r?\n/).filter(Boolean).slice(-3).join(" ")}`);
@@ -234,24 +298,28 @@ export async function generateSticker(input: GenerateStickerInput): Promise<Gene
   const parsedUrl = assertYouTubeUrl(input.url);
   const startSeconds = parseTimestamp(input.timestamp, parsedUrl);
   const mode = input.mode === "animated" ? "animated" : "static";
-  const duration = safeDuration(input.duration);
+  const shape = safeShape(input.shape);
+  const endSeconds = mode === "animated" ? parseTimestamp(input.endTimestamp, parsedUrl) : startSeconds + 1;
+  const duration = mode === "animated" ? resolveClipDuration(startSeconds, endSeconds) : 1;
   const id = crypto.randomUUID();
   const jobDir = path.join(TMP_DIR, id);
   const extension = mode === "animated" ? "mp4" : "webp";
   const filename = `${mode}-sticker-${id.slice(0, 8)}.${extension}`;
   const absolutePath = path.join(jobDir, filename);
 
+  await cleanupOldJobs();
   await mkdir(jobDir, { recursive: true });
 
-  const streamUrl = await getDirectVideoUrl(input.url, 480);
+  const streamUrl = await getDirectVideoUrl(parsedUrl.toString(), 480);
 
   await encodeWithFallback({
-    url: input.url,
+    url: parsedUrl.toString(),
     streamUrl,
     jobDir,
     startSeconds,
     duration,
     mode,
+    shape,
     outputPath: absolutePath
   });
 
@@ -259,8 +327,9 @@ export async function generateSticker(input: GenerateStickerInput): Promise<Gene
     id,
     filename,
     absolutePath,
-    sizeBytes: await fileSize(absolutePath),
-    mode
+    sizeBytes: await assertGeneratedFileSize(absolutePath),
+    mode,
+    shape
   };
 }
 

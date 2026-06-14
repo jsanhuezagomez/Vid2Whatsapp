@@ -69,6 +69,31 @@ input {
   text-transform: uppercase;
 }
 
+.topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.languagePicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.languagePicker select {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+}
+
 h1 {
   margin: 0;
   font-size: clamp(2.5rem, 8vw, 5.5rem);
@@ -155,6 +180,10 @@ input[type="range"] {
   margin: -6px 0 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.turnstileBox {
+  min-height: 65px;
 }
 
 .primary {
@@ -281,5 +310,9 @@ input[type="range"] {
   .generator,
   .preview {
     padding: 22px;
+  }
+
+  .topline {
+    align-items: flex-start;
   }
 }

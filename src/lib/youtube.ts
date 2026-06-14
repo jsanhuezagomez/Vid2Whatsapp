@@ -11,14 +11,26 @@ const YOUTUBE_HOSTS = new Set([
 export function assertYouTubeUrl(input: string) {
   let parsed: URL;
 
+  if (input.length > 2048) {
+    throw new Error("The YouTube URL is too long.");
+  }
+
   try {
     parsed = new URL(input);
   } catch {
     throw new Error("Paste a valid YouTube URL.");
   }
 
+  if (parsed.protocol !== "https:") {
+    throw new Error("Use an HTTPS YouTube link.");
+  }
+
   if (!YOUTUBE_HOSTS.has(parsed.hostname)) {
     throw new Error("Only YouTube links are supported in this local MVP.");
+  }
+
+  if (parsed.searchParams.has("list")) {
+    parsed.searchParams.delete("list");
   }
 
   return parsed;
@@ -27,31 +39,40 @@ export function assertYouTubeUrl(input: string) {
 export function parseTimestamp(input: string | undefined, url: URL) {
   const raw = input?.trim() || url.searchParams.get("t") || url.searchParams.get("start") || "";
 
+  if (raw.length > 32) {
+    throw new Error("Use a shorter timestamp.");
+  }
+
   if (!raw) {
     return 0;
   }
 
-  if (/^\d+(?:\.\d+)?$/.test(raw)) {
-    return Number(raw);
-  }
-
   const text = raw.toLowerCase();
-  const unitMatch = text.match(/^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s?)?(?:(\d+)ms)?$/);
-
-  if (unitMatch && unitMatch[0]) {
-    const hours = Number(unitMatch[1] ?? 0);
-    const minutes = Number(unitMatch[2] ?? 0);
-    const seconds = Number(unitMatch[3] ?? 0);
-    const milliseconds = Number(unitMatch[4] ?? 0);
-    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+  if (!/^\d+:\d{1,2}(?::\d{1,2})?(?:\.\d+)?$/.test(text)) {
+    throw new Error("Use a timestamp like 1:23 or 1:23.5.");
   }
 
   const parts = text.split(":").map(Number);
-  if (parts.length > 3 || parts.some((part) => Number.isNaN(part) || part < 0)) {
-    throw new Error("Use a timestamp like 83, 83.4, 1:23.7, 1h2m3.4s, or 3s400ms.");
+  if (parts.some((part) => Number.isNaN(part) || part < 0)) {
+    throw new Error("Use a timestamp like 1:23 or 1:23.5.");
   }
 
-  return parts.reduce((total, part) => total * 60 + part, 0);
+  const lastPart = parts.at(-1) ?? 0;
+  const middlePart = parts.length === 3 ? parts[1] : 0;
+  if (lastPart >= 60 || middlePart >= 60) {
+    throw new Error("Use a timestamp like 1:23 or 1:23.5.");
+  }
+
+  const seconds = parts.reduce((total, part) => total * 60 + part, 0);
+  return assertReasonableTimestamp(seconds);
+}
+
+function assertReasonableTimestamp(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0 || seconds > 6 * 60 * 60) {
+    throw new Error("Use a timestamp between 0 and 6 hours.");
+  }
+
+  return seconds;
 }
 
 export async function getDirectVideoUrl(url: string, maxHeight = 720) {

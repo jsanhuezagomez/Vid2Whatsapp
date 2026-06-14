@@ -1,0 +1,32 @@
+services:
+  sticker-app:
+    build:
+      context: .
+    container_name: sticker-app
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      STICKER_MAX_CONCURRENCY: 1
+      STICKER_MAX_QUEUE: 4
+      STICKER_RATE_LIMIT_10M_MAX: 3
+      STICKER_RATE_LIMIT_DAILY_MAX: 20
+      STICKER_TMP_TTL_MS: 3600000
+    ports:
+      - "127.0.0.1:3001:3000"
+    cpus: "1.25"
+    mem_limit: 1g
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /app/tmp:size=512m,mode=1777,uid=1001,gid=1001
+      - /tmp:size=128m,mode=1777,uid=1001,gid=1001
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
