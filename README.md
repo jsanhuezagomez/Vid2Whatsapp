@@ -69,6 +69,60 @@ The app listens on:
 
 Put Nginx in front of it for `https://sticker.cyberianode.cl`.
 
+## Deploy With GitHub Actions
+
+Create a dedicated deploy user on the VPS, for example `sticker`, and give it ownership of the app directory:
+
+```bash
+sudo adduser --disabled-password --gecos "" sticker
+sudo mkdir -p /srv/cyberianode/sticker
+sudo chown -R sticker:sticker /srv/cyberianode/sticker
+```
+
+Add the GitHub Actions public SSH key to:
+
+```text
+/home/sticker/.ssh/authorized_keys
+```
+
+Then fix permissions:
+
+```bash
+sudo chown -R sticker:sticker /home/sticker/.ssh
+sudo chmod 700 /home/sticker/.ssh
+sudo chmod 600 /home/sticker/.ssh/authorized_keys
+```
+
+Because this app is deployed with Docker, the `sticker` user needs permission to run Docker. The simple option is:
+
+```bash
+sudo usermod -aG docker sticker
+```
+
+Log out and back in before testing Docker as that user.
+
+Create `/srv/cyberianode/sticker/.env.production` on the VPS. Do not commit this file:
+
+```bash
+sudo -u sticker nano /srv/cyberianode/sticker/.env.production
+```
+
+Configure these GitHub repository secrets:
+
+```text
+VPS_HOST=your_vps_ip
+VPS_PORT=10887
+VPS_USER=sticker
+VPS_APP_DIR=/srv/cyberianode/sticker
+VPS_SSH_KEY=private deploy key without passphrase
+```
+
+The deploy workflow syncs source files with `rsync`, keeps `.env.production` on the VPS, and runs:
+
+```bash
+docker compose up -d --build
+```
+
 Recommended Nginx location for the generate endpoint:
 
 ```nginx
