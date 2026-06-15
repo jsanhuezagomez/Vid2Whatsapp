@@ -19,7 +19,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const filePath = resolveGeneratedFile(id, filename);
     const fileStats = await stat(filePath);
     const stream = Readable.toWeb(createReadStream(filePath)) as ReadableStream;
-    const contentType = filename.endsWith(".mp4") ? "video/mp4" : "image/webp";
+    const contentType = "video/mp4";
 
     return new NextResponse(stream, {
       headers: {

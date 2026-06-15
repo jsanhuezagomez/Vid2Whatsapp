@@ -4,7 +4,7 @@ import { CommandError } from "./process";
 import { runCommand } from "./process";
 import { assertYouTubeUrl, downloadSection, getDirectVideoUrl, parseTimestamp } from "./youtube";
 
-export type StickerMode = "static" | "animated";
+export type StickerMode = "animated";
 export type StickerShape = "square" | "original";
 
 export type GenerateStickerInput = {
@@ -43,7 +43,11 @@ export function resolveClipDuration(startSeconds: number, endSeconds: number) {
 }
 
 export function safeShape(value: StickerShape | undefined): StickerShape {
-  return value === "original" ? "original" : "square";
+  if (value === "original") {
+    return value;
+  }
+
+  return "square";
 }
 
 export function videoFilter(shape: StickerShape, fps?: number) {
@@ -92,46 +96,6 @@ async function cleanupOldJobs() {
           await rm(dir, { force: true, recursive: true });
         }
       })
-  );
-}
-
-async function encodeStatic(
-  inputUrl: string,
-  startSeconds: number,
-  outputPath: string,
-  shape: StickerShape,
-  timeoutMs = 60_000,
-  seekMode: "input" | "output" = "input"
-) {
-  const seekArgs = ["-ss", seekTime(startSeconds)];
-  const inputArgs = ["-i", inputUrl];
-
-  await runCommand(
-    "ffmpeg",
-    [
-      "-hide_banner",
-      "-nostdin",
-      "-y",
-      "-threads",
-      "1",
-      ...(seekMode === "input" ? seekArgs : []),
-      ...inputArgs,
-      ...(seekMode === "output" ? seekArgs : []),
-      "-frames:v",
-      "1",
-      "-vf",
-      videoFilter(shape),
-      "-c:v",
-      "libwebp",
-      "-lossless",
-      "0",
-      "-compression_level",
-      "6",
-      "-q:v",
-      "72",
-      outputPath
-    ],
-    timeoutMs
   );
 }
 
@@ -228,23 +192,12 @@ async function encodeWithFallback(input: {
   outputPath: string;
 }) {
   try {
-    if (input.mode === "static") {
-      await encodeStatic(input.streamUrl, input.startSeconds, input.outputPath, input.shape, 15_000);
-      return;
-    }
-
     await encodeAnimated(input.streamUrl, input.startSeconds, input.duration, input.outputPath, input.shape, 20_000);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "unknown error";
     console.warn(`[fallback] Fast remote ffmpeg failed: ${reason}`);
 
     try {
-      if (input.mode === "static") {
-        console.warn("[fallback] Trying remote decode before downloading a local section.");
-        await encodeStatic(input.streamUrl, input.startSeconds, input.outputPath, input.shape, 30_000, "output");
-        return;
-      }
-
       console.warn("[fallback] Trying remote decode before downloading a local section.");
       await encodeAnimated(input.streamUrl, input.startSeconds, input.duration, input.outputPath, input.shape, 35_000, "output");
       return;
@@ -256,13 +209,12 @@ async function encodeWithFallback(input: {
     console.warn("[fallback] Downloading local section instead.");
 
     const sectionTemplate = path.join(input.jobDir, "source.%(ext)s");
-    const fallbackDuration = input.mode === "static" ? 2 : input.duration;
 
     try {
       await downloadSection({
         url: input.url,
         startSeconds: input.startSeconds,
-        durationSeconds: fallbackDuration,
+        durationSeconds: input.duration,
         outputTemplate: sectionTemplate,
         includeAudio: false,
         maxHeight: 480,
@@ -281,11 +233,6 @@ async function encodeWithFallback(input: {
 
     const mediaPath = await findDownloadedMedia(input.jobDir);
 
-    if (input.mode === "static") {
-      await encodeStatic(mediaPath, 0, input.outputPath, input.shape);
-      return;
-    }
-
     await encodeAnimated(mediaPath, 0, input.duration, input.outputPath, input.shape);
 
     if (error instanceof CommandError) {
@@ -297,13 +244,13 @@ async function encodeWithFallback(input: {
 export async function generateSticker(input: GenerateStickerInput): Promise<GenerateStickerResult> {
   const parsedUrl = assertYouTubeUrl(input.url);
   const startSeconds = parseTimestamp(input.timestamp, parsedUrl);
-  const mode = input.mode === "animated" ? "animated" : "static";
+  const mode: StickerMode = "animated";
   const shape = safeShape(input.shape);
-  const endSeconds = mode === "animated" ? parseTimestamp(input.endTimestamp, parsedUrl) : startSeconds + 1;
-  const duration = mode === "animated" ? resolveClipDuration(startSeconds, endSeconds) : 1;
+  const endSeconds = parseTimestamp(input.endTimestamp, parsedUrl);
+  const duration = resolveClipDuration(startSeconds, endSeconds);
   const id = crypto.randomUUID();
   const jobDir = path.join(TMP_DIR, id);
-  const extension = mode === "animated" ? "mp4" : "webp";
+  const extension = "mp4";
   const filename = `${mode}-sticker-${id.slice(0, 8)}.${extension}`;
   const absolutePath = path.join(jobDir, filename);
 
@@ -334,7 +281,7 @@ export async function generateSticker(input: GenerateStickerInput): Promise<Gene
 }
 
 export function resolveGeneratedFile(id: string, filename: string) {
-  if (!/^[a-f0-9-]{36}$/.test(id) || !/^[a-z0-9-]+\.(webp|mp4)$/.test(filename)) {
+  if (!/^[a-f0-9-]{36}$/.test(id) || !/^[a-z0-9-]+\.mp4$/.test(filename)) {
     throw new Error("Invalid generated file path.");
   }
 

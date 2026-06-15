@@ -81,13 +81,23 @@ export async function POST(request: Request) {
       maxRequests: Number(process.env.STICKER_RATE_LIMIT_DAILY_MAX ?? 20)
     });
 
+    const requestedUrl = String(body.url ?? "");
+    const requestedShape = body.shape === "original" ? "original" : "square";
+    console.info("[generate:request]", {
+      clientIp,
+      url: requestedUrl,
+      timestamp: typeof body.timestamp === "string" ? body.timestamp : "",
+      endTimestamp: typeof body.endTimestamp === "string" ? body.endTimestamp : "",
+      shape: requestedShape
+    });
+
     const result = await runStickerJob(() =>
       generateSticker({
-        url: String(body.url ?? ""),
+        url: requestedUrl,
         timestamp: typeof body.timestamp === "string" ? body.timestamp : "",
         endTimestamp: typeof body.endTimestamp === "string" ? body.endTimestamp : "",
-        mode: body.mode === "animated" ? "animated" : "static",
-        shape: body.shape === "original" ? "original" : "square"
+        mode: "animated",
+        shape: requestedShape
       })
     );
 

@@ -5,15 +5,15 @@ import { resolveClipDuration, resolveGeneratedFile, safeShape, videoFilter } fro
 describe("resolveGeneratedFile", () => {
   it("builds paths under tmp for valid generated files", () => {
     const id = "123e4567-e89b-12d3-a456-426614174000";
-    const resolved = resolveGeneratedFile(id, "static-sticker-123e4567.webp");
+    const resolved = resolveGeneratedFile(id, "animated-sticker-123e4567.mp4");
 
-    expect(resolved).toBe(path.join(process.cwd(), "tmp", id, "static-sticker-123e4567.webp"));
+    expect(resolved).toBe(path.join(process.cwd(), "tmp", id, "animated-sticker-123e4567.mp4"));
   });
 
   it("rejects traversal and unexpected extensions", () => {
-    expect(() => resolveGeneratedFile("../bad", "static-sticker.webp")).toThrow(/Invalid/);
-    expect(() => resolveGeneratedFile("123e4567-e89b-12d3-a456-426614174000", "../bad.webp")).toThrow(/Invalid/);
-    expect(() => resolveGeneratedFile("123e4567-e89b-12d3-a456-426614174000", "static-sticker.exe")).toThrow(/Invalid/);
+    expect(() => resolveGeneratedFile("../bad", "animated-sticker.mp4")).toThrow(/Invalid/);
+    expect(() => resolveGeneratedFile("123e4567-e89b-12d3-a456-426614174000", "../bad.mp4")).toThrow(/Invalid/);
+    expect(() => resolveGeneratedFile("123e4567-e89b-12d3-a456-426614174000", "animated-sticker.webp")).toThrow(/Invalid/);
   });
 });
 

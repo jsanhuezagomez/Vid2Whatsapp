@@ -3,7 +3,7 @@
 import Script from "next/script";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-type StickerMode = "static" | "animated";
+type StickerMode = "animated";
 type StickerShape = "square" | "original";
 type Language = "es" | "en";
 
@@ -28,59 +28,47 @@ declare global {
 
 const copy = {
   es: {
-    eyebrow: "MVP local",
-    intro:
-      "Pega un enlace de YouTube, elige el momento y genera un sticker estilo WhatsApp desde tu máquina.",
+    intro: "Pega un enlace de YouTube, elige un rango corto y genera un sticker estilo WhatsApp desde tu maquina.",
     youtubeLink: "Enlace de YouTube",
     timestamp: "Timestamp inicial",
     timestampPlaceholder: "1:23 o 1:23.5",
     endTimestamp: "Timestamp final",
     endTimestampPlaceholder: "1:27 o 1:27.5",
-    stickerType: "Tipo de sticker",
-    static: "Estático",
-    animated: "Animado",
     outputShape: "Formato de salida",
     square: "Cuadrado",
     original: "Original",
     squareShape: "recortado a 512x512",
-    originalShape: "manteniendo la proporción original",
-    staticHelp: "Captura un frame del timestamp y exporta un WebP",
+    originalShape: "manteniendo la proporcion original",
     animatedHelp: "Corta un clip corto sin audio y lo exporta como MP4",
-    localMode: "Modo local: la verificación está desactivada.",
+    localMode: "Modo local: la verificacion esta desactivada.",
     generating: "Generando...",
+    generatingDetail: "Procesando el video. Esto puede tomar unos segundos.",
     generate: "Generar sticker",
-    genericError: "Algo salió mal.",
+    genericError: "Algo salio mal.",
     apiError: "No se pudo generar el sticker.",
-    previewAlt: "Vista previa del sticker generado",
     download: "Descargar",
-    emptyPreview: "La vista previa del sticker generado aparecerá aquí.",
+    emptyPreview: "La vista previa del sticker generado aparecera aqui.",
     languageLabel: "Idioma"
   },
   en: {
-    eyebrow: "Local MVP",
-    intro:
-      "Paste a YouTube link, pick the moment, and generate a WhatsApp-style sticker on your machine.",
+    intro: "Paste a YouTube link, pick a short range, and generate a WhatsApp-style sticker on your machine.",
     youtubeLink: "YouTube link",
     timestamp: "Start timestamp",
     timestampPlaceholder: "1:23 or 1:23.5",
     endTimestamp: "End timestamp",
     endTimestampPlaceholder: "1:27 or 1:27.5",
-    stickerType: "Sticker type",
-    static: "Static",
-    animated: "Animated",
     outputShape: "Output shape",
     square: "Square",
     original: "Original",
     squareShape: "cropped to 512x512",
     originalShape: "kept in its original aspect ratio",
-    staticHelp: "Captures one frame from the timestamp and exports a WebP",
     animatedHelp: "Cuts a short silent clip and exports it as an MP4",
     localMode: "Local mode: verification is disabled.",
     generating: "Generating...",
+    generatingDetail: "Processing the video. This can take a few seconds.",
     generate: "Generate sticker",
     genericError: "Something went wrong.",
     apiError: "Could not generate sticker.",
-    previewAlt: "Generated sticker preview",
     download: "Download",
     emptyPreview: "Your generated sticker preview will appear here.",
     languageLabel: "Language"
@@ -104,7 +92,6 @@ export default function Home() {
   const [url, setUrl] = useState("");
   const [timestamp, setTimestamp] = useState("");
   const [endTimestamp, setEndTimestamp] = useState("");
-  const [mode, setMode] = useState<StickerMode>("static");
   const [shape, setShape] = useState<StickerShape>("square");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -153,12 +140,8 @@ export default function Home() {
   const helperText = useMemo(() => {
     const shapeText = shape === "square" ? t.squareShape : t.originalShape;
 
-    if (mode === "static") {
-      return `${t.staticHelp}, ${shapeText}.`;
-    }
-
     return `${t.animatedHelp}, ${shapeText}.`;
-  }, [mode, shape, t]);
+  }, [shape, t]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -176,7 +159,7 @@ export default function Home() {
           url,
           timestamp,
           endTimestamp,
-          mode,
+          mode: "animated",
           shape,
           turnstileToken
         })
@@ -206,7 +189,6 @@ export default function Home() {
       <section className="workspace" aria-labelledby="title">
         <div className="intro">
           <div className="topline">
-            <p className="eyebrow">{t.eyebrow}</p>
             <label className="languagePicker">
               <span>{t.languageLabel}</span>
               <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
@@ -241,36 +223,15 @@ export default function Home() {
             />
           </label>
 
-          {mode === "animated" ? (
-            <label className="field">
-              <span>{t.endTimestamp}</span>
-              <input
-                required
-                value={endTimestamp}
-                onChange={(event) => setEndTimestamp(event.target.value)}
-                placeholder={t.endTimestampPlaceholder}
-              />
-            </label>
-          ) : null}
-
-          <div className="modeRow" role="radiogroup" aria-label={t.stickerType}>
-            <button
-              type="button"
-              className={mode === "static" ? "active" : ""}
-              onClick={() => setMode("static")}
-              aria-pressed={mode === "static"}
-            >
-              {t.static}
-            </button>
-            <button
-              type="button"
-              className={mode === "animated" ? "active" : ""}
-              onClick={() => setMode("animated")}
-              aria-pressed={mode === "animated"}
-            >
-              {t.animated}
-            </button>
-          </div>
+          <label className="field">
+            <span>{t.endTimestamp}</span>
+            <input
+              required
+              value={endTimestamp}
+              onChange={(event) => setEndTimestamp(event.target.value)}
+              placeholder={t.endTimestampPlaceholder}
+            />
+          </label>
 
           <p className="hint">{helperText}</p>
 
@@ -309,26 +270,33 @@ export default function Home() {
             {isGenerating ? t.generating : t.generate}
           </button>
 
+          {isGenerating ? (
+            <div className="loadingStatus" role="status" aria-live="polite">
+              <span className="loadingBar" />
+              <p>{t.generatingDetail}</p>
+            </div>
+          ) : null}
+
           {error ? <p className="error">{error}</p> : null}
         </form>
 
         <aside className="preview" aria-live="polite">
-          {result ? (
+          {isGenerating ? (
+            <div className="emptyState loadingPreview">
+              <span className="spinner" aria-hidden="true" />
+              <p>{t.generatingDetail}</p>
+            </div>
+          ) : result ? (
             <>
               <div className="stickerFrame">
-                {result.mode === "animated" ? (
-                  <video src={result.downloadUrl} autoPlay loop muted playsInline />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={result.downloadUrl} alt={t.previewAlt} />
-                )}
+                <video src={result.downloadUrl} autoPlay loop muted playsInline />
               </div>
               <div className="resultMeta">
                 <strong>{result.filename}</strong>
                 <span>{formatBytes(result.sizeBytes)}</span>
               </div>
               <a className="download" href={result.downloadUrl} download={result.filename}>
-                {t.download} {result.mode === "animated" ? "MP4" : "WebP"}
+                {t.download} MP4
               </a>
             </>
           ) : (

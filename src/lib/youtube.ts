@@ -26,7 +26,7 @@ export function assertYouTubeUrl(input: string) {
   }
 
   if (!YOUTUBE_HOSTS.has(parsed.hostname)) {
-    throw new Error("Only YouTube links are supported in this local MVP.");
+    throw new Error("Only YouTube links are supported.");
   }
 
   if (parsed.searchParams.has("list")) {

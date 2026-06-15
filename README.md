@@ -1,6 +1,6 @@
 # Vid2WhatsApp
 
-Local-first app for turning a YouTube timestamp into a WhatsApp-style WebP sticker.
+Local-first app for turning a short YouTube range into a WhatsApp-style MP4 sticker.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ STICKER_MAX_CONCURRENCY=1
 STICKER_MAX_QUEUE=4
 STICKER_RATE_LIMIT_10M_MAX=3
 STICKER_RATE_LIMIT_DAILY_MAX=20
-STICKER_TMP_TTL_MS=3600000
+STICKER_TMP_TTL_MS=300000
 ```
 
 In production, `TURNSTILE_SECRET_KEY` is required. Without it, `/api/generate` rejects requests.
@@ -226,9 +226,8 @@ npm run build
 
 ## MVP Notes
 
-- Static mode extracts one frame and encodes it as WebP.
-- Animated mode cuts a short silent clip from start timestamp to end timestamp, up to 5 seconds, and encodes it as animated WebP.
+- Animated mode cuts a short silent clip from start timestamp to end timestamp, up to 5 seconds, and encodes it as MP4.
 - Timestamps must use colon format, such as `1:23` or `1:23.5`; raw seconds like `17.6` are rejected.
-- Output can be cropped to square 512x512 or kept in the original aspect ratio, scaled down to fit within 512x512.
+- Output can be cropped to square 512x512 or kept in the original aspect ratio.
 - The app asks `yt-dlp` for a direct video stream and lets FFmpeg seek into it.
 - Docker, queues, and deployment hardening are included for production use.
