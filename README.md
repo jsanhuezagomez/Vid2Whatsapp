@@ -67,7 +67,7 @@ The app listens on:
 127.0.0.1:3001
 ```
 
-Put Nginx in front of it for `https://sticker.cyberianode.cl`.
+Put Nginx in front of it for `https://stickers.cyberianode.cl`.
 
 ## Deploy With GitHub Actions
 
@@ -129,7 +129,7 @@ Recommended Nginx location for the generate endpoint:
 limit_req_zone $binary_remote_addr zone=sticker_generate:10m rate=3r/m;
 
 server {
-    server_name sticker.cyberianode.cl;
+    server_name stickers.cyberianode.cl;
 
     location /api/generate {
         limit_req zone=sticker_generate burst=3 nodelay;

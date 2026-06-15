@@ -68,6 +68,9 @@ export async function POST(request: Request) {
     assertTrustedProxy(request);
 
     const clientIp = getClientIp(request);
+    const body = await request.json();
+    await assertTurnstileToken(String(body.turnstileToken ?? ""), clientIp);
+
     assertRateLimit(`generate:${clientIp}`, {
       windowMs: 10 * 60 * 1000,
       maxRequests: Number(process.env.STICKER_RATE_LIMIT_10M_MAX ?? 3)
@@ -77,9 +80,6 @@ export async function POST(request: Request) {
       windowMs: 24 * 60 * 60 * 1000,
       maxRequests: Number(process.env.STICKER_RATE_LIMIT_DAILY_MAX ?? 20)
     });
-
-    const body = await request.json();
-    await assertTurnstileToken(String(body.turnstileToken ?? ""), clientIp);
 
     const result = await runStickerJob(() =>
       generateSticker({

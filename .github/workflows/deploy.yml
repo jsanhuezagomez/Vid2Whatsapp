@@ -1,4 +1,4 @@
-name: Deploy sticker.cyberianode.cl
+name: Deploy stickers.cyberianode.cl
 
 on:
   push:

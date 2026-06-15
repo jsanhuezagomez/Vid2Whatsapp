@@ -26,8 +26,6 @@ declare global {
   }
 }
 
-const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
-
 const copy = {
   es: {
     eyebrow: "MVP local",
@@ -112,6 +110,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState("");
   const [language, setLanguage] = useState<Language>("es");
   const t = copy[language];
 
@@ -123,6 +122,31 @@ export default function Home() {
     return () => {
       delete window.onTurnstileSuccess;
       delete window.onTurnstileExpired;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadConfig() {
+      try {
+        const response = await fetch("/api/config");
+        const payload = await response.json();
+
+        if (isMounted && typeof payload.turnstileSiteKey === "string") {
+          setTurnstileSiteKey(payload.turnstileSiteKey);
+        }
+      } catch {
+        if (isMounted) {
+          setTurnstileSiteKey("");
+        }
+      }
+    }
+
+    loadConfig();
+
+    return () => {
+      isMounted = false;
     };
   }, []);
 
