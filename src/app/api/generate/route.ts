@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { CommandError } from "@/lib/process";
 import { generateSticker } from "@/lib/stickers";
 import { QueueFullError, runStickerJob } from "@/lib/jobQueue";
+import { assertYouTubeUrl, extractYouTubeVideoId } from "@/lib/youtube";
 import {
   assertRateLimit,
   assertTrustedProxy,
@@ -82,10 +83,14 @@ export async function POST(request: Request) {
     });
 
     const requestedUrl = String(body.url ?? "");
+    const parsedVideoUrl = assertYouTubeUrl(requestedUrl);
+    const videoUrl = parsedVideoUrl.toString();
+    const videoId = extractYouTubeVideoId(parsedVideoUrl);
     const requestedShape = body.shape === "original" ? "original" : "square";
     console.info("[generate:request]", {
       clientIp,
-      url: requestedUrl,
+      videoUrl,
+      videoId,
       timestamp: typeof body.timestamp === "string" ? body.timestamp : "",
       endTimestamp: typeof body.endTimestamp === "string" ? body.endTimestamp : "",
       shape: requestedShape
@@ -93,13 +98,23 @@ export async function POST(request: Request) {
 
     const result = await runStickerJob(() =>
       generateSticker({
-        url: requestedUrl,
+        url: videoUrl,
         timestamp: typeof body.timestamp === "string" ? body.timestamp : "",
         endTimestamp: typeof body.endTimestamp === "string" ? body.endTimestamp : "",
         mode: "animated",
         shape: requestedShape
       })
     );
+
+    console.info("[generate:success]", {
+      clientIp,
+      videoUrl,
+      videoId,
+      id: result.id,
+      filename: result.filename,
+      sizeBytes: result.sizeBytes,
+      shape: result.shape
+    });
 
     return NextResponse.json({
       id: result.id,
