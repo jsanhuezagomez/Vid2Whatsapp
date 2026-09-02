@@ -37,12 +37,18 @@ function errorResponse(error: unknown) {
   }
 
   if (error instanceof ProxyTrustError) {
-    console.warn("[proxy:reject]", error.message);
+    console.warn("[proxy:reject]", {
+      message: error.message,
+      ...error.context
+    });
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   if (error instanceof ClientIpError) {
-    console.warn("[client-ip:reject]", error.message);
+    console.warn("[client-ip:reject]", {
+      message: error.message,
+      ...error.context
+    });
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 

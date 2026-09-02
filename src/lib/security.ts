@@ -19,6 +19,22 @@ const buckets = new Map<string, RateLimitBucket>();
 const TRUSTED_CLIENT_IP_HEADER = "x-sticker-client-ip";
 const INTERNAL_PROXY_SECRET_HEADER = "x-internal-proxy-secret";
 
+type SecurityLogContext = {
+  method: string;
+  url: string;
+  host: string | null;
+  origin: string | null;
+  userAgent: string | null;
+  trustedClientIp: string | null;
+  trustedClientIpValid: boolean;
+  forwardedFor: string | null;
+  realIp: string | null;
+  cfConnectingIp: string | null;
+  forwardedProto: string | null;
+  internalProxySecretPresent: boolean;
+  internalProxySecretMatches?: boolean;
+};
+
 export class RateLimitError extends Error {
   constructor(readonly retryAfterSeconds: number) {
     super("Too many requests. Please wait and try again.");
@@ -34,17 +50,43 @@ export class VerificationError extends Error {
 }
 
 export class ProxyTrustError extends Error {
-  constructor(message = "Request did not come through the trusted proxy.") {
+  constructor(
+    message = "Request did not come through the trusted proxy.",
+    readonly context?: SecurityLogContext
+  ) {
     super(message);
     this.name = "ProxyTrustError";
   }
 }
 
 export class ClientIpError extends Error {
-  constructor(message = "Verified client IP is missing or invalid.") {
+  constructor(
+    message = "Verified client IP is missing or invalid.",
+    readonly context?: SecurityLogContext
+  ) {
     super(message);
     this.name = "ClientIpError";
   }
+}
+
+function getSecurityLogContext(request: Request, internalProxySecretMatches?: boolean): SecurityLogContext {
+  const trustedClientIp = request.headers.get(TRUSTED_CLIENT_IP_HEADER)?.trim() || null;
+
+  return {
+    method: request.method,
+    url: request.url,
+    host: request.headers.get("host"),
+    origin: request.headers.get("origin"),
+    userAgent: request.headers.get("user-agent"),
+    trustedClientIp,
+    trustedClientIpValid: Boolean(trustedClientIp && isIP(trustedClientIp)),
+    forwardedFor: request.headers.get("x-forwarded-for"),
+    realIp: request.headers.get("x-real-ip"),
+    cfConnectingIp: request.headers.get("cf-connecting-ip"),
+    forwardedProto: request.headers.get("x-forwarded-proto"),
+    internalProxySecretPresent: request.headers.has(INTERNAL_PROXY_SECRET_HEADER),
+    internalProxySecretMatches
+  };
 }
 
 export function getClientIp(request: Request) {
@@ -58,8 +100,10 @@ export function getClientIp(request: Request) {
     return "local-dev";
   }
 
-  console.warn(`[client-ip:missing] ${TRUSTED_CLIENT_IP_HEADER} was not set by the reverse proxy.`);
-  throw new ClientIpError();
+  throw new ClientIpError(
+    `${TRUSTED_CLIENT_IP_HEADER} is missing or invalid. Check the reverse proxy header configuration.`,
+    getSecurityLogContext(request)
+  );
 }
 
 export function assertTrustedProxy(request: Request) {
@@ -67,16 +111,25 @@ export function assertTrustedProxy(request: Request) {
 
   if (!expectedSecret) {
     if (process.env.NODE_ENV === "production") {
-      throw new ProxyTrustError("Trusted proxy secret is not configured.");
+      throw new ProxyTrustError(
+        "Trusted proxy secret is not configured.",
+        getSecurityLogContext(request)
+      );
     }
 
     return;
   }
 
   const providedSecret = request.headers.get(INTERNAL_PROXY_SECRET_HEADER);
+  const secretMatches = providedSecret === expectedSecret;
 
-  if (!providedSecret || providedSecret !== expectedSecret) {
-    throw new ProxyTrustError();
+  if (!providedSecret || !secretMatches) {
+    throw new ProxyTrustError(
+      providedSecret
+        ? "Request provided an invalid trusted proxy secret."
+        : "Request did not include the trusted proxy secret.",
+      getSecurityLogContext(request, secretMatches)
+    );
   }
 }
 
