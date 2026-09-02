@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertYouTubeUrl, parseTimestamp } from "./youtube";
+import { assertYouTubeUrl, extractYouTubeVideoId, parseTimestamp } from "./youtube";
 
 describe("assertYouTubeUrl", () => {
   it("accepts supported HTTPS YouTube hosts", () => {
@@ -15,6 +15,15 @@ describe("assertYouTubeUrl", () => {
   it("removes playlist parameters", () => {
     const url = assertYouTubeUrl("https://www.youtube.com/watch?v=abc123&list=PL123");
     expect(url.searchParams.has("list")).toBe(false);
+  });
+});
+
+describe("extractYouTubeVideoId", () => {
+  it("extracts video IDs from common YouTube URL formats", () => {
+    expect(extractYouTubeVideoId(new URL("https://www.youtube.com/watch?v=abc123"))).toBe("abc123");
+    expect(extractYouTubeVideoId(new URL("https://youtu.be/abc123?t=1:23"))).toBe("abc123");
+    expect(extractYouTubeVideoId(new URL("https://www.youtube.com/shorts/abc123"))).toBe("abc123");
+    expect(extractYouTubeVideoId(new URL("https://www.youtube.com/embed/abc123"))).toBe("abc123");
   });
 });
 

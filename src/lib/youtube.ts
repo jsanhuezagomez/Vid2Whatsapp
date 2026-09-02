@@ -36,6 +36,24 @@ export function assertYouTubeUrl(input: string) {
   return parsed;
 }
 
+export function extractYouTubeVideoId(url: URL) {
+  if (url.hostname === "youtu.be") {
+    return url.pathname.split("/").filter(Boolean)[0] ?? null;
+  }
+
+  const videoParam = url.searchParams.get("v");
+  if (videoParam) {
+    return videoParam;
+  }
+
+  const [kind, id] = url.pathname.split("/").filter(Boolean);
+  if (["embed", "shorts", "live"].includes(kind ?? "")) {
+    return id ?? null;
+  }
+
+  return null;
+}
+
 export function parseTimestamp(input: string | undefined, url: URL) {
   const raw = input?.trim() || url.searchParams.get("t") || url.searchParams.get("start") || "";
 
